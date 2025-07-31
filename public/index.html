@@ -1,70 +1,79 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Impostore - Web Game</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
   <div class="container">
-    <h1>🎭 Impostore - Gioco di Deduzione</h1>
+    <h1>🎭 Impostore</h1>
 
-    <div class="card">
-      <input id="nickname" placeholder="Il tuo nickname" />
-      <input id="roomInput" placeholder="Codice stanza (es. ABCD)" maxlength="4"/>
+    <!-- Menu Create/Join -->
+    <section id="menuCard" class="card">
+      <input id="nickname" placeholder="Nickname"/>
+      <input id="roomInput" placeholder="Codice stanza (ABCD)" maxlength="4"/>
       <div class="buttons">
         <button id="createBtn">Crea Partita</button>
         <button id="joinBtn">Entra</button>
       </div>
-    </div>
+    </section>
 
-    <div class="card">
-      <h2 id="roomCode">Codice stanza: -</h2>
+    <!-- Lobby -->
+    <section id="lobbyCard" class="card hidden">
+      <h2 id="roomCode">Codice: -</h2>
       <ul id="playerList"></ul>
-      <button id="startBtn">Inizia Partita</button>
-    </div>
+      <button id="startBtn">Inizia</button>
+    </section>
+
+    <!-- Round View -->
+    <section id="roundCard" class="card hidden">
+      <h2 id="roleDisplay"></h2>
+      <p id="wordDisplay"></p>
+      <button id="nextBtn" class="next hidden">Prossimo Round</button>
+    </section>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
-
-    const nicknameInput = document.getElementById('nickname');
+    const nickname = document.getElementById('nickname');
     const roomInput = document.getElementById('roomInput');
-    const roomCodeDisplay = document.getElementById('roomCode');
-    const playerList = document.getElementById('playerList');
     const createBtn = document.getElementById('createBtn');
     const joinBtn = document.getElementById('joinBtn');
     const startBtn = document.getElementById('startBtn');
-
-    let currentCode = '';
+    const nextBtn = document.getElementById('nextBtn');
+    const menu = document.getElementById('menuCard');
+    const lobby = document.getElementById('lobbyCard');
+    const round = document.getElementById('roundCard');
+    const roomCode = document.getElementById('roomCode');
+    const playerList = document.getElementById('playerList');
+    const roleDisplay = document.getElementById('roleDisplay');
+    const wordDisplay = document.getElementById('wordDisplay');
+    let code = '';
 
     createBtn.onclick = () => {
-      const name = nicknameInput.value.trim();
-      if (!name) return alert('Inserisci un nickname');
+      if (!nickname.value.trim()) return alert('Inserisci un nickname');
       socket.emit('create');
-      socket.once('created', (code) => {
-        currentCode = code;
-        roomCodeDisplay.textContent = 'Codice stanza: ' + code;
-        socket.emit('join', { code, name });
+      socket.once('created', c => {
+        code = c;
+        roomCode.textContent = 'Codice: ' + c;
+        socket.emit('join', { code: c, name: nickname.value.trim() });
       });
     };
 
     joinBtn.onclick = () => {
-      const name = nicknameInput.value.trim();
-      const code = roomInput.value.trim().toUpperCase();
-      if (!name || !code) return alert('Inserisci nickname e codice');
-      currentCode = code;
-      socket.emit('join', { code, name });
+      if (!nickname.value.trim() || !roomInput.value.trim())
+        return alert('Nickname e codice obbligatori');
+      code = roomInput.value.trim().toUpperCase();
+      socket.emit('join', { code, name: nickname.value.trim() });
     };
 
-    startBtn.onclick = () => {
-      if (!currentCode) return;
-      socket.emit('start', currentCode);
-    };
-
-    socket.on('lobby', (players) => {
+    socket.on('lobby', players => {
+      menu.classList.add('hidden');
+      lobby.classList.remove('hidden');
+      roomCode.textContent = 'Codice: ' + code;
       playerList.innerHTML = '';
       players.forEach(p => {
         const li = document.createElement('li');
@@ -73,15 +82,21 @@
       });
     });
 
-    socket.on('error', msg => alert(msg));
+    startBtn.onclick = () => socket.emit('start', code);
+    nextBtn.onclick = () => {
+      socket.emit('nextRound', code);
+      nextBtn.classList.add('hidden');
+    };
 
     socket.on('role', ({ impostor, word }) => {
-      if (impostor) {
-        alert('⚠️ Sei l\'IMPOSTORE! Fingi di conoscere la parola.');
-      } else {
-        alert('✅ Sei un investigatore. La parola è: ' + word);
-      }
+      lobby.classList.add('hidden');
+      round.classList.remove('hidden');
+      nextBtn.classList.remove('hidden');
+      roleDisplay.textContent = impostor ? '💀 IMPOSTORE' : '🔍 INVESTIGATORE';
+      wordDisplay.textContent = impostor ? '' : 'Parola: ' + word;
     });
+
+    socket.on('error', alert);
   </script>
 </body>
 </html>

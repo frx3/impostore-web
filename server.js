@@ -1,7 +1,3 @@
-// =============================
-// IMPOSTORE - VERSIONE MINIMA WEB (robusta)
-// =============================
-
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -13,30 +9,61 @@ app.use(express.static('public'));
 
 const server = http.createServer(app);
 const io = new Server(server);
-
 const PORT = process.env.PORT || 3000;
 
-let games = {}; // struttura: { code: { players: [{id,name}], started:bool, word, impostorId } }
+let games = {}; // { code: { players: [{id,name}], word, impostorId, code } }
 
 const WORDS = [
-  'Colosseo', 'Testimone', 'Astronave', 'Fucile', 'Ferrari', 'Caricatura', 'Neve', 'Netflix', 'Fragola',
-  'Giulio Cesare', 'Panificio', 'Buddha', 'Zebra', 'Storia', 'Dottor', 'Guida', 'Tennis da tavolo',
-  'Superman', 'Caramello', 'Piuma', 'Pizza', 'Mare', 'Montagna', 'Computer', 'Scuola', 'Cinema',
-  'Telefono', 'Pallone', 'Gatto', 'Cane', 'Viaggio', 'Sedia', 'Occhiali', 'Finestra', 'Porta', 'Luna',
-  'Sole', 'Nuvola', 'Tempesta', 'Bosco', 'Fiume', 'Aereo', 'Treno', 'Bicicletta', 'Caffè', 'Libro',
-  'Penna', 'Matita', 'Cioccolato'
+  // --- Originali ---
+  'Colosseo','Testimone','Astronave','Fucile','Ferrari','Caricatura','Neve','Netflix','Fragola',
+  'Giulio Cesare','Panificio','Buddha','Zebra','Storia','Dottor','Guida','Tennis da tavolo','Superman',
+  'Caramello','Piuma','Pizza','Mare','Montagna','Computer','Scuola','Cinema','Telefono','Pallone','Gatto',
+  'Cane','Viaggio','Sedia','Occhiali','Finestra','Porta','Luna','Sole','Nuvola','Tempesta','Bosco','Fiume',
+  'Aereo','Treno','Bicicletta','Caffè','Libro','Penna','Matita','Cioccolato',
+
+  // --- Musica ---
+  'Chitarra','Batteria','Concerto','Festival','Microfono','Nota','Canzone','Sanremo','Rap','Orchestra',
+
+  // --- Cultura pop / Cinema ---
+  'Avengers','Harry Potter','Star Wars','Batman','Spider-Man','Matrix','Oscar','Popcorn','Regista','Marvel',
+
+  // --- Religione cristiana cattolica ---
+  'Gesù','Bibbia','Preghiera','Vangelo','Papa','Croce','Chiesa','Angelo','Rosario','Sacerdote',
+
+  // --- Anime / Manga ---
+  'Naruto','One Piece','Goku','Dragon Ball','Anime','Manga','Sailor Moon','Attacco dei Giganti','Pokémon','Luffy',
+
+  // --- Videogiochi ---
+  'Minecraft','Fortnite','Super Mario','Zelda','Joystick','Console','Tetris','Controller','Pokemon','PlayStation',
+
+  // --- Altro semplice ---
+  'Ospedale','Semaforo','Uovo','Scarpa','Orologio','Gelato','Calcio','Maglietta','Specchio','Farfalla'
 ];
 
 function generateCode() {
-  return Math.random().toString(36).substr(2, 4).toUpperCase();
+  return Math.random().toString(36).substr(2,4).toUpperCase();
 }
 
-io.on('connection', (socket) => {
-  console.log(`✅ Nuova connessione: ${socket.id}`);
+function assignRound(game) {
+  game.word = WORDS[Math.floor(Math.random() * WORDS.length)];
+  const idx = Math.floor(Math.random() * game.players.length);
+  game.impostorId = game.players[idx].id;
+  game.players.forEach(p => {
+    if (p.id === game.impostorId) {
+      io.to(p.id).emit('role', { impostor: true });
+    } else {
+      io.to(p.id).emit('role', { impostor: false, word: game.word });
+    }
+  });
+  console.log(`🔄 Round per stanza ${game.code}: parola="${game.word}", impostore=${game.impostorId}`);
+}
+
+io.on('connection', socket => {
+  console.log(`✅ Connessione: ${socket.id}`);
 
   socket.on('create', () => {
     const code = generateCode();
-    games[code] = { players: [], started: false };
+    games[code] = { players: [], code };
     socket.join(code);
     socket.emit('created', code);
     console.log(`🎮 Stanza creata: ${code}`);
@@ -44,42 +71,25 @@ io.on('connection', (socket) => {
 
   socket.on('join', ({ code, name }) => {
     const game = games[code];
-    console.log('📥 JOIN REQUEST:', code, name);
-    if (!game) {
-      socket.emit('error', 'Codice stanza non valido');
-      return;
-    }
-    if (game.started) {
-      socket.emit('error', 'La partita è già iniziata');
-      return;
-    }
-
+    if (!game) return socket.emit('error', 'Codice stanza non valido');
     const player = { id: socket.id, name };
     game.players.push(player);
     socket.join(code);
     io.in(code).emit('lobby', game.players);
-    console.log(`👤 ${name} è entrato nella stanza ${code}`);
+    console.log(`👤 ${name} entrato in ${code}`);
   });
 
-  socket.on('start', (code) => {
+  socket.on('start', code => {
     const game = games[code];
-    if (!game || game.started) return;
+    if (!game || game.players.length === 0) return;
+    assignRound(game);
+  });
 
-    game.started = true;
-    game.word = WORDS[Math.floor(Math.random() * WORDS.length)];
-    const impostorIndex = Math.floor(Math.random() * game.players.length);
-    game.impostorId = game.players[impostorIndex].id;
-
-    console.log(`🚀 Partita iniziata nella stanza ${code} - parola: ${game.word}`);
-
-    game.players.forEach((player) => {
-      if (player.id === game.impostorId) {
-        io.to(player.id).emit('role', { impostor: true });
-      } else {
-        io.to(player.id).emit('role', { impostor: false, word: game.word });
-      }
-    });
+  socket.on('nextRound', code => {
+    const game = games[code];
+    if (!game || game.players.length === 0) return;
+    assignRound(game);
   });
 });
 
-server.listen(PORT, () => console.log(`✨ Server attivo su http://localhost:${PORT}`));
+server.listen(PORT, () => console.log(`✨ Server in ascolto su http://localhost:${PORT}`));

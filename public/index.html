@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Impostore - Web Game</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>🎭 Impostore - Gioco di Deduzione</h1>
+
+    <div class="card">
+      <input id="nickname" placeholder="Il tuo nickname" />
+      <input id="roomInput" placeholder="Codice stanza (es. ABCD)" maxlength="4"/>
+      <div class="buttons">
+        <button id="createBtn">Crea Partita</button>
+        <button id="joinBtn">Entra</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 id="roomCode">Codice stanza: -</h2>
+      <ul id="playerList"></ul>
+      <button id="startBtn">Inizia Partita</button>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+
+    const nicknameInput = document.getElementById('nickname');
+    const roomInput = document.getElementById('roomInput');
+    const roomCodeDisplay = document.getElementById('roomCode');
+    const playerList = document.getElementById('playerList');
+    const createBtn = document.getElementById('createBtn');
+    const joinBtn = document.getElementById('joinBtn');
+    const startBtn = document.getElementById('startBtn');
+
+    let currentCode = '';
+
+    createBtn.onclick = () => {
+      const name = nicknameInput.value.trim();
+      if (!name) return alert('Inserisci un nickname');
+      socket.emit('create');
+      socket.once('created', (code) => {
+        currentCode = code;
+        roomCodeDisplay.textContent = 'Codice stanza: ' + code;
+        socket.emit('join', { code, name });
+      });
+    };
+
+    joinBtn.onclick = () => {
+      const name = nicknameInput.value.trim();
+      const code = roomInput.value.trim().toUpperCase();
+      if (!name || !code) return alert('Inserisci nickname e codice');
+      currentCode = code;
+      socket.emit('join', { code, name });
+    };
+
+    startBtn.onclick = () => {
+      if (!currentCode) return;
+      socket.emit('start', currentCode);
+    };
+
+    socket.on('lobby', (players) => {
+      playerList.innerHTML = '';
+      players.forEach(p => {
+        const li = document.createElement('li');
+        li.textContent = p.name;
+        playerList.appendChild(li);
+      });
+    });
+
+    socket.on('error', msg => alert(msg));
+
+    socket.on('role', ({ impostor, word }) => {
+      if (impostor) {
+        alert('⚠️ Sei l\'IMPOSTORE! Fingi di conoscere la parola.');
+      } else {
+        alert('✅ Sei un investigatore. La parola è: ' + word);
+      }
+    });
+  </script>
+</body>
+</html>
